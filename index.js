@@ -181,11 +181,31 @@ async function run() {
             res.send(result);
         })
 
+        // app.post('/order', async (req, res) => {
+        //     const item = req.body;
+        //     const result = await orderCollection.insertOne(item);
+        //     res.send(result);
+        // })
+
         app.post('/order', async (req, res) => {
             const item = req.body;
-            const result = await orderCollection.insertOne(item);
-            res.send(result);
-        })
+            const existingOrder = await orderCollection.findOne({ product_id: item.product_id, email: item.email });
+        
+            if (existingOrder) {
+                // If the order already exists, update its quantity
+                const updatedQuantity = existingOrder.quantity + 1;
+                const result = await orderCollection.updateOne(
+                    { _id: existingOrder._id },
+                    { $set: { quantity: updatedQuantity } }
+                );
+                res.send(result);
+            } else {
+                // If the order does not exist, insert a new order
+                const result = await orderCollection.insertOne(item);
+                res.send(result);
+            }
+        });
+        
 
         app.delete('/order/:id', async (req, res) => {
             const id = req.params.id;
