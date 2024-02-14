@@ -2,6 +2,7 @@ const express = require('express')
 const app = express()
 require('dotenv').config()
 const jwt = require('jsonwebtoken');
+const stripe = require("stripe")(process.env.PAYMENT_SECRET_KEY);
 const cors = require('cors')
 const port = process.env.PORT || 5000
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -48,6 +49,7 @@ async function run() {
         const clothesCollection = client.db("luminaStore").collection("clothes");
         const orderCollection = client.db("luminaStore").collection("order");
         const userCollection = client.db("luminaStore").collection("user");
+        const paymentCollection = client.db("luminaStore").collection("payment");
 
 
 
@@ -190,7 +192,7 @@ async function run() {
         app.post('/order', async (req, res) => {
             const item = req.body;
             const existingOrder = await orderCollection.findOne({ product_id: item.product_id, email: item.email });
-        
+
             if (existingOrder) {
                 // If the order already exists, update its quantity
                 const updatedQuantity = existingOrder.quantity + 1;
@@ -205,7 +207,7 @@ async function run() {
                 res.send(result);
             }
         });
-        
+
 
         app.delete('/order/:id', async (req, res) => {
             const id = req.params.id;
@@ -213,6 +215,49 @@ async function run() {
             const result = await orderCollection.deleteOne(query);
             res.send(result);
         })
+
+        // {---------Payment api---------}
+
+        //payment intent
+        app.post('/create-payment-intent', verifyJWT, async (req, res) => {
+            const { price } = req.body;
+            const amount = price * 100;
+
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: [
+                    "card"
+                ],
+            });
+
+            res.send({
+                clientSecret: paymentIntent.client_secret,
+            });
+        })
+
+        app.get('/payment/:email', verifyJWT, async (req, res) => {
+            const email = req.params.email;
+            if(req.decoded.email != email){
+                return res.status(403).send({message: 'forbidden access'});
+            }
+
+            const query = { email: email }
+            const result = await paymentCollection.find(query).toArray();
+            res.send(result);
+        })
+
+        app.post('/payment', verifyJWT, async (req, res) => {
+            const payment = req.body;
+            const insertResult = await paymentCollection.insertOne(payment);
+
+            const query = { _id: { $in: payment.orderProducts.map(id => new ObjectId(id)) } }
+            const deleteResult = await orderCollection.deleteMany(query);
+
+
+            res.send({ insertResult, deleteResult });
+        })
+
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
