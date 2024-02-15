@@ -285,6 +285,44 @@ async function run() {
             });
         })
 
+        // using aggregate pipeline
+        app.get('/order-statistics', async(req, res) => {
+            const result = await paymentCollection.aggregate([
+                {
+                    $unwind: '$productsId'
+                },
+                {
+                    $lookup: {
+                        from: 'clothes',
+                        localField: 'productsId',
+                        foreignField: 'category_id',
+                        as: 'orderProducts'
+                    }
+                },
+                {
+                    $unwind: '$orderProducts'
+                },
+                {
+                    $group: {
+                        _id: '$orderProducts.category',
+                        quantity: {$sum: 1},
+                        totalRevenue: {$sum: '$orderProducts.new_price'}
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        category: '$_id',
+                        quantity: '$quantity',
+                        revenue: '$totalRevenue'
+                    }
+                }
+            ]).toArray();
+
+            res.send(result);
+        })
+
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
