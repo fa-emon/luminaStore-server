@@ -258,6 +258,32 @@ async function run() {
             res.send({ insertResult, deleteResult });
         })
 
+        app.get('/admin-statistics', verifyJWT, verifyAdmin, async (req, res) => {
+            const user = await userCollection.estimatedDocumentCount();
+            const products = await clothesCollection.estimatedDocumentCount();
+            const orders = await paymentCollection.estimatedDocumentCount();
+            // const payments = await paymentCollection.find().toArray();
+            // const revenue = payments.reduce((sum, item) => sum + item.price, 0)
+            const result = await paymentCollection.aggregate([
+                {
+                    $group:{
+                        _id: null,
+                        totalRevenue: {
+                            $sum: '$price'
+                        }
+                    }
+                }
+            ]).toArray();
+
+            const revenue = result.length > 0 ? result[0].totalRevenue : 0
+
+            res.send({
+                user,
+                products,
+                orders,
+                revenue
+            });
+        })
 
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
